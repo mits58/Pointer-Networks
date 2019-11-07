@@ -6,14 +6,15 @@ An implementation of Pointer Networks in chainer
   - ~~データは ((x1, x2, ..., xn), (t1, t2, t3……))　みたいな感じ　もちろんnは可変~~
 - Pointer Network そのものの実装（たいへん）
   - Seq2Seq部分の実装
-    - Encoder部分の実装
-    - Decoder部分の実装
-    - 組合せたネットワークの実装？
+    - Call部分のBatch化
   - Attention部分の実装
-    - よくわからん
+    - よくわからんので調べる
   - PointerNetworkの実装
-    - わからん
+    - わからんので調べる
 - 実際に回してみる（やるだけ）
+
+# Todo (後回し）
+- Seq2Seq部分の、Decoderの構成を少しきちんと考えたほうがよいと思います（それはそう）
 
 # Links
 - Pointer Networksのデータセット
