@@ -38,13 +38,11 @@ class Decoder(chainer.Chain):
     def __init__(self, input_dim, hidden_dim, output_classes):
         super(Decoder, self).__init__(
             # transforming graph feature vector into (4 * hidden_dim) dim. vector
-            feat_to_hidden = L.Linear(input_dim, 4 * hidden_dim),
+            input_to_hidden = L.Linear(output_classes, 4 * hidden_dim),
             # transforming hidden rep into (4 * hidden_dim) dim. vector
             hidden_to_hidden = L.Linear(hidden_dim, 4 * hidden_dim),
-            # transforming output vector into graph feat vector
-            output_to_feat = L.Linear(hidden_dim, input_dim),
-            # transforming graph feat vector into one-hot vector (output_classes dim.)
-            feat_to_onehot = L.Linear(input_dim, output_classes)
+            # transforming raw output vector into output_vector
+            hidden_to_out = L.Linear(hidden_dim, output_classes),
         )
         # check whether hidden state is initialized ?
         """
@@ -56,16 +54,16 @@ class Decoder(chainer.Chain):
 
     # forward
     def __call__(self, y, c, h):
-        c, h = F.lstm(c, self.feat_to_hidden(y), self.hidden_to_hidden(h))
-        t = self.output_to_feat(h)
-        return self.feat_to_onehot(t), t, c, h
+        c, h = F.lstm(c, self.input_to_hidden(y) + self.hidden_to_hidden(h))
+        t = self.hidden_to_out(h)
+        return t, c, h
 
 
 class Seq2Seq(chainer.Chain):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(Seq2Seq, self).__init__(
             encoder = Encoder(input_dim, hidden_dim),
-            decoder = Decoder(input_dim, hidden_dim, output_dim),
+            decoder = Decoder(1, hidden_dim, output_dim),
         )
 
         self.input_dim = input_dim
@@ -76,30 +74,31 @@ class Seq2Seq(chainer.Chain):
         xp = self.device.xp
         batchsize = len(batch)
 
-        for points, perms in zip(batch, targets)
+        for points, perms in zip(batch, targets):
             # initialize internal representation and hidden representation
-            points = points.reshape(10, 2)  # todo: change to adaptive
-            inter_rep = chainer.Variable(xp.zeros(self.hidden_dim), dtype='float32'))
-            hidden_rep = chainer.Variable(xp.zeros(self.hidden_dim), dtype='float32'))
+            points = chainer.Variable(points.reshape(10, 2))  # todo: change to adaptive
+            inter_rep = chainer.Variable(xp.zeros((1, self.hidden_dim), dtype='float32'))
+            hidden_rep = chainer.Variable(xp.zeros((1, self.hidden_dim), dtype='float32'))
 
             ''' encoder '''
             for p in points:
-                inter_rep, hidden_rep = self.encoder(p, inter_rep, hidden_rep)
+                inter_rep, hidden_rep = self.encoder(p.reshape(1, 2), inter_rep, hidden_rep)
 
             self.inter_rep = inter_rep
-            self.hidden_rep = chainer.Variable(xp.zeros(self.hidden_dim), dtype='float32')
+            self.hidden_rep = chainer.Variable(xp.zeros((1, self.hidden_dim), dtype='float32'))
 
             # initialize the loss
             loss = chainer.Variable(xp.zeros((), dtype='float32'))
 
             ''' decoder '''
             # input start character into the decoder
-            t = chainer.Variable(xp.zeros((), dtype='float32'))
+            t = chainer.Variable(xp.zeros((1, self.output_dim), dtype='float32'))
 
             for p in perms:
-                y, self.c, self.h = self.decoder(t, self.c, self.h)
-                t = chainer.Variable(xp.array(p, dtype='int32'))
+                y, self.inter_rep, self.hidden_rep = self.decoder(t, self.inter_rep, self.hidden_rep)
+                t = chainer.Variable(xp.array([p - 1], dtype='int32'))
                 loss += F.softmax_cross_entropy(y, t)
+                t = chainer.Variable(xp.eye(self.output_dim, dtype='float32')[p - 1].reshape(1, self.output_dim))
 
         return loss
 
