@@ -7,6 +7,7 @@ An implementation of Pointer Networks in chainer
 - Pointer Network そのものの実装（たいへん）
   - Seq2Seq部分の実装
     - Call部分のBatch化
+      - NStepLSTMとかいうバチコリのバチがあったのでそれを使う
   - Attention部分の実装
     - よくわからんので調べる
   - PointerNetworkの実装
