@@ -1,4 +1,5 @@
 import argparse
+import numpy
 import numpy as np
 import math
 import chainer
@@ -12,105 +13,56 @@ import matplotlib.pyplot as plt
 
 import util
 
-
-class Encoder(chainer.Chain):
-    def __init__(self, input_dim, hidden_dim):
-        super(Encoder, self).__init__(
-            # transforming graph feature vector into (4 * hidden_dim) dim. vector
-            feat_to_hidden = L.Linear(input_dim, 4 * hidden_dim),
-            # transforming hidden rep into (4 * hidden_dim) dim. vector
-            hidden_to_hidden = L.Linear(hidden_dim, 4 * hidden_dim),
-        )
-
-    # forward
-    def __call__(self, graph_embed, c, h):
-        """
-        graph_embed : graph embedding
-        c           : internal memory
-        h           : hidden representation
-
-        but i dont know clearly :(
-        """
-        return F.lstm(c, self.feat_to_hidden(graph_embed) + self.hidden_to_hidden(h))
-
-
-class Decoder(chainer.Chain):
-    def __init__(self, input_dim, hidden_dim, output_classes):
-        super(Decoder, self).__init__(
-            # transforming graph feature vector into (4 * hidden_dim) dim. vector
-            input_to_hidden = L.Linear(output_classes, 4 * hidden_dim),
-            # transforming hidden rep into (4 * hidden_dim) dim. vector
-            hidden_to_hidden = L.Linear(hidden_dim, 4 * hidden_dim),
-            # transforming raw output vector into output_vector
-            hidden_to_out = L.Linear(hidden_dim, output_classes),
-        )
-        # check whether hidden state is initialized ?
-        """
-                self.h = Variable(self.ARR.zeros((self.batch_size, self.hidden_size), dtype='float32'))
-                self.c = Variable(self.ARR.zeros((self.batch_size, self.hidden_size), dtype='float32'))
-
-                self.zerograds()
-        """
-
-    # forward
-    def __call__(self, y, c, h):
-        c, h = F.lstm(c, self.input_to_hidden(y) + self.hidden_to_hidden(h))
-        t = self.hidden_to_out(h)
-        return t, c, h
-
-
 class Seq2Seq(chainer.Chain):
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(Seq2Seq, self).__init__(
-            encoder = Encoder(input_dim, hidden_dim),
-            decoder = Decoder(1, hidden_dim, output_dim),
-        )
+        super(Seq2Seq, self).__init__()
+        with self.init_scope():
+            # NStepLSTM(n_layers, input_size, output_size, dropout)
+            self.encoder = L.NStepLSTM(1, input_dim, hidden_dim, 0.1)
+            self.decoder = L.NStepLSTM(1, output_dim, hidden_dim, 0.1)
+            self.hidden_to_out = L.Linear(hidden_dim, output_dim + 1)
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
 
-    def __call__(self, batch, targets=None):
+    def __call__(self, xs, ys):
+        # set the array module based on using device
         xp = self.device.xp
-        batchsize = len(batch)
 
-        for points, perms in zip(batch, targets):
-            # initialize internal representation and hidden representation
-            points = chainer.Variable(points.reshape(10, 2))  # todo: change to adaptive
-            inter_rep = chainer.Variable(xp.zeros((1, self.hidden_dim), dtype='float32'))
-            hidden_rep = chainer.Variable(xp.zeros((1, self.hidden_dim), dtype='float32'))
+        # make input data (batchsize, input_length, input_dim)
+        xs = [chainer.Variable(x).reshape(10, 2) for x in xs]
 
-            ''' encoder '''
-            for p in points:
-                inter_rep, hidden_rep = self.encoder(p.reshape(1, 2), inter_rep, hidden_rep)
+        # make output data (batchsize, n + 1, output_dim)
+        st_seq = xp.zeros((1, self.output_dim), dtype='float32')
+        ys_in = [F.concat([st_seq, xp.identity(self.output_dim, dtype='float32')[y - 1]], axis=0) for y in ys]
+        ys_out = [F.concat([y, xp.array([0])], axis=0) for y in ys]
 
-            self.inter_rep = inter_rep
-            self.hidden_rep = chainer.Variable(xp.zeros((1, self.hidden_dim), dtype='float32'))
+        batch = len(xs)
+        # None represents a zero vector in an encoder.
+        hx, cx, _ = self.encoder(None, None, xs)
+        _, _, os = self.decoder(hx, None, ys_in)
 
-            # initialize the loss
-            loss = chainer.Variable(xp.zeros((), dtype='float32'))
+        # It is faster to concatenate data before calculating loss
+        # because only one matrix multiplication is called.
+        concat_os = F.concat(os, axis=0)
+        concat_ys_out = F.concat(ys_out, axis=0)
+        pred_dist = self.hidden_to_out(concat_os)
+        loss = F.sum(F.softmax_cross_entropy(pred_dist, concat_ys_out, reduce='no')) / batch
+        accuracy = F.accuracy(pred_dist, concat_ys_out)
 
-            ''' decoder '''
-            # input start character into the decoder
-            t = chainer.Variable(xp.zeros((1, self.output_dim), dtype='float32'))
-
-            for p in perms:
-                y, self.inter_rep, self.hidden_rep = self.decoder(t, self.inter_rep, self.hidden_rep)
-                t = chainer.Variable(xp.array([p - 1], dtype='int32'))
-                loss += F.softmax_cross_entropy(y, t)
-                t = chainer.Variable(xp.eye(self.output_dim, dtype='float32')[p - 1].reshape(1, self.output_dim))
-
+        chainer.report({'loss': loss}, self)
+        chainer.report({'accuracy': accuracy}, self)
         return loss
-
 
 def main():
     parser = argparse.ArgumentParser(description='An implementation of seq2seq in chainer')
-    parser.add_argument('--dataset', type=str, default="tsp_10_train_exact.txt",
+    parser.add_argument('--dataset', type=str, default="modeltest.txt",
                         help='dataset name')
     parser.add_argument('--input_dim', type=int, default=2)
     parser.add_argument('--hidden_dim', type=int, default=64)
     parser.add_argument('--output_dim', type=int, default=10)
-    parser.add_argument('--batchsize', '-b', type=int, default=32)
+    parser.add_argument('--batchsize', '-b', type=int, default=64)
     parser.add_argument('--device', '-d', type=str, default='-1')
     parser.add_argument('--out', type=str, default='result')
     parser.add_argument('--epoch', type=int, default=350)
@@ -124,6 +76,12 @@ def main():
     # loading dataset
     print('loading dataset...')
     dataset = util.PlaneData(args.dataset, device)
+
+    print('Device: {}'.format(device))
+    print('# Minibatch-size: {}'.format(args.batchsize))
+    print('# epoch: {}'.format(args.epoch))
+    print('# dataset-size: {}'.format(len(dataset)))
+    print('')
 
     # making seq2seq model
     model = Seq2Seq(args.input_dim, args.hidden_dim, args.output_dim)
