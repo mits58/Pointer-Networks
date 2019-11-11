@@ -1,5 +1,9 @@
+An implementation of 
+- Sequence to Sequence
+- Pointer Networks
+
 # Pointer-Networks
-An implementation of Pointer Networks in chainer
+An implementation of Pointer Networks in chainer.
 
 # Todo
 - ~~データを扱うためのクラス定義と、実データを読み込むまでをやる（やるだけ）~~
