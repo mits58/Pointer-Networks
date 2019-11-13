@@ -1,43 +1,50 @@
 import argparse
-import numpy
-import numpy as np
-import math
+
+
 import chainer
 import chainer.functions as F
 import chainer.links as L
-from chainer import training
 from chainer.training import extensions
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+
 
 import util
 
 
 class Attention(chainer.Chain):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    """
+    A class for Attention in seq2seq.
+
+    Attributes
+    ----------
+    W1, W2, v : chainer.links.Linear
+        Learnable Matrices and vector (in soft attention)
+    hidden_dim : int
+        number of hidden units in each layer
+    """
+    def __init__(self, hidden_dim):
         super(Attention, self).__init__()
         with self.init_scope():
-            # For attention
             self.W1 = L.Linear(hidden_dim, hidden_dim)
             self.W2 = L.Linear(hidden_dim, hidden_dim)
             self.v = L.Linear(hidden_dim, 1)
 
-        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
 
     def __call__(self, es, ds):
         """
-        es: hidden state of encoder
-        ds: hidden state of decoder
+        Parameters
+        ----------
+        es : list
+            hidden states of encoder
+        ds : list
+            hidden states of decoder
         """
-        batchsize = len(es)
-        xp = self.device.xp
-
         # calculation (W1 * ej),  (W2 * dj) and make tensor (n, m(P)) from each batchdata
         # i wanna accelerate this code :(
-        tensors = []
+        probs = []
+        indices = []
         for e_i, d_i in zip(es, ds):
             dim_n = e_i.shape[0]  # n
             dim_mp = d_i.shape[0]  # m(P)
@@ -45,22 +52,14 @@ class Attention(chainer.Chain):
             # expand e_i
             expanded_ei = F.repeat(F.expand_dims(self.W1(e_i), axis=0), dim_mp, axis=0)
             # expand d_i
-            expanded_di = F.transpose(F.repeat(F.expand_dims(self.W2(d_i), axis=0) ,dim_n, axis=0), (1, 0, 2))
-            # add tensor to tensors
-            tensors.append(expanded_ei + expanded_di)
+            expanded_di = F.transpose(F.repeat(F.expand_dims(self.W2(d_i), axis=0) , dim_n, axis=0), (1, 0, 2))
+            # sum up two tensor and activate with tanh and lineared
+            activated = F.squeeze(self.v(F.tanh(expanded_di + expanded_ei), n_batch_axes=len(expanded_ei.shape) - 1))
 
-        # sum up two tensor and activate with tanh and lineared
-        # i wanna accelerate this code too!
-        probs = []
-        indices = []
-        for tensor in tensors:
-            activated = F.squeeze(self.v(F.tanh(tensor), n_batch_axes=len(tensor.shape) - 1))
             probs.append(activated)
             indices.append(F.argmax(F.softmax(activated, axis=-1), axis=-1))
 
         return probs, indices
-
-
 
 
 class Seq2Seq(chainer.Chain):
@@ -71,7 +70,7 @@ class Seq2Seq(chainer.Chain):
             self.encoder = L.NStepLSTM(1, input_dim, hidden_dim, 0.1)
             self.decoder = L.NStepLSTM(1, input_dim, hidden_dim, 0.1)
             # For attention
-            self.attention = Attention(input_dim, hidden_dim, output_dim)
+            self.attention = Attention(hidden_dim)
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -118,8 +117,9 @@ class Seq2Seq(chainer.Chain):
         chainer.report({'accuracy': accuracy}, self)
         return loss
 
+
 def main():
-    parser = argparse.ArgumentParser(description='An implementation of seq2seq in chainer')
+    parser = argparse.ArgumentParser(description='An implementation of pointer networks in chainer')
     parser.add_argument('--dataset', type=str, default="modeltest.txt",
                         help='dataset name')
     parser.add_argument('--input_dim', type=int, default=2)
@@ -195,6 +195,7 @@ def main():
         with open('./result/{0}/{1}.model_stat'.format(res_path, agg_name), 'wb') as f:
             pickle.dump(args, f)
     """
+
 
 if __name__ == '__main__':
     main()
