@@ -26,8 +26,8 @@ class PlaneData(chainer.dataset.DatasetMixin):
     def converter(self, datalist, device):
         xp = chainer.get_device(device).xp
         batch_points = [data[0] for data in datalist]
-        batch_perms = [data[0] for data in datalist]
-        return batch_poins, batch_perms
+        batch_perms = [data[1] for data in datalist]
+        return batch_points, batch_perms
 
     def load_data(dataset, device):
         """
@@ -40,7 +40,7 @@ class PlaneData(chainer.dataset.DatasetMixin):
             xp = device.xp
 
 
-        with open('./data/tsp_10_train_exact.txt', 'r') as f:
+        with open('./data/{}'.format(dataset), 'r') as f:
             data = f.readlines()
 
         points = []
@@ -48,7 +48,7 @@ class PlaneData(chainer.dataset.DatasetMixin):
 
         for d in data:
             pt, pm = [tmp.strip() for tmp in d.split("output")]
-            pt = xp.array([float(val) for val in pt.split(" ")], dtype=np.float32)
+            pt = xp.array([float(val) for val in pt.split(" ")], dtype=xp.float32)
             pm = xp.array([int(num) for num in pm.split(" ")])
 
             points.append(pt)
