@@ -33,11 +33,9 @@ class Attention(chainer.Chain):
         ds: hidden state of decoder
         """
         batchsize = len(es)
-        # calculation (W1 * ej),  (W2 * dj)
-        es = self.W1(F.stack(es, axis=0), n_batch_axes=2)
-        ds = self.W2(F.stack(ds, axis=0), n_batch_axes=2)
+        xp = self.device.xp
 
-        # make tensor (n, m(P)) from each batchdata
+        # calculation (W1 * ej),  (W2 * dj) and make tensor (n, m(P)) from each batchdata
         # i wanna accelerate this code :(
         tensors = []
         for e_i, d_i in zip(es, ds):
@@ -45,18 +43,22 @@ class Attention(chainer.Chain):
             dim_mp = d_i.shape[0]  # m(P)
 
             # expand e_i
-            expanded_ei = F.repeat(F.expand_dims(e_i, axis=0), dim_mp, axis=0)
+            expanded_ei = F.repeat(F.expand_dims(self.W1(e_i), axis=0), dim_mp, axis=0)
             # expand d_i
-            expanded_di = F.transpose(F.repeat(F.expand_dims(d_i, axis=0) ,dim_n, axis=0), (1, 0, 2))
+            expanded_di = F.transpose(F.repeat(F.expand_dims(self.W2(d_i), axis=0) ,dim_n, axis=0), (1, 0, 2))
             # add tensor to tensors
             tensors.append(expanded_ei + expanded_di)
 
-        tensors = F.stack(tensors, axis=0)
-
         # sum up two tensor and activate with tanh and lineared
-        activated = F.squeeze(self.v(F.tanh(tensors), n_batch_axes=len(tensors.shape) - 1))
+        # i wanna accelerate this code too!
+        probs = []
+        indices = []
+        for tensor in tensors:
+            activated = F.squeeze(self.v(F.tanh(tensor), n_batch_axes=len(tensor.shape) - 1))
+            probs.append(activated)
+            indices.append(F.argmax(F.softmax(activated, axis=-1), axis=-1))
 
-        return activated, F.argmax(F.softmax(activated, axis=-1), axis=-1)
+        return probs, indices
 
 
 
