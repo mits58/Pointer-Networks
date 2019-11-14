@@ -1,13 +1,11 @@
 import argparse
 
-
 import chainer
 import chainer.functions as F
 import chainer.links as L
 from chainer.training import extensions
 import matplotlib
 matplotlib.use('Agg')
-
 
 import util
 
@@ -41,7 +39,8 @@ class Attention(chainer.Chain):
         ds : list
             hidden states of decoder
         """
-        # calculation (W1 * ej),  (W2 * dj) and make tensor (n, m(P)) from each batchdata
+        # calculation (W1 * ej),  (W2 * dj) and
+        #    make tensor (n, m(P)) from each batchdata
         # i wanna accelerate this code :(
         probs = []
         indices = []
@@ -52,7 +51,7 @@ class Attention(chainer.Chain):
             # expand e_i
             expanded_ei = F.repeat(F.expand_dims(self.W1(e_i), axis=0), dim_mp, axis=0)
             # expand d_i
-            expanded_di = F.transpose(F.repeat(F.expand_dims(self.W2(d_i), axis=0) , dim_n, axis=0), (1, 0, 2))
+            expanded_di = F.transpose(F.repeat(F.expand_dims(self.W2(d_i), axis=0), dim_n, axis=0), (1, 0, 2))
             # sum up two tensor and activate with tanh and lineared
             activated = F.squeeze(self.v(F.tanh(expanded_di + expanded_ei), n_batch_axes=len(expanded_ei.shape) - 1))
 
@@ -63,7 +62,7 @@ class Attention(chainer.Chain):
 
 
 class Seq2Seq(chainer.Chain):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim):
         super(Seq2Seq, self).__init__()
         with self.init_scope():
             # NStepLSTM(n_layers, input_size, output_size, dropout)
@@ -74,7 +73,6 @@ class Seq2Seq(chainer.Chain):
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
 
     def __call__(self, xs, ys):
         # set the array module based on using device
@@ -124,7 +122,6 @@ def main():
                         help='dataset name')
     parser.add_argument('--input_dim', type=int, default=2)
     parser.add_argument('--hidden_dim', type=int, default=64)
-    parser.add_argument('--output_dim', type=int, default=10)
     parser.add_argument('--batchsize', '-b', type=int, default=64)
     parser.add_argument('--device', '-d', type=str, default='-1')
     parser.add_argument('--out', type=str, default='result')
@@ -147,7 +144,7 @@ def main():
     print('')
 
     # making seq2seq model
-    model = Seq2Seq(args.input_dim, args.hidden_dim, args.output_dim)
+    model = Seq2Seq(args.input_dim, args.hidden_dim)
 
     # Choose the using device
     model.to_device(device)
@@ -165,7 +162,7 @@ def main():
 
     # Set up a trainer
     updater = chainer.training.updaters.StandardUpdater(train_iter, optimizer,
-                                                device=device, converter=dataset.converter)
+                                                        device=device, converter=dataset.converter)
     trainer = chainer.training.Trainer(updater, (args.epoch, 'epoch'), out=args.out)
 
     # Evaluate the model with the test dataset for each epoch
@@ -179,7 +176,7 @@ def main():
     trainer.extend(extensions.PlotReport(['main/accuracy', 'validation/main/accuracy'], 'epoch', file_name='accuracy.png'))
     # Print selected entries of the log to stdout
     trainer.extend(extensions.PrintReport(['epoch', 'main/loss', 'validation/main/loss',
-                                               'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
+                                           'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
 
     # Print a progress bar to stdout
     trainer.extend(extensions.ProgressBar())
