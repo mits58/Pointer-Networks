@@ -12,21 +12,22 @@ import util
 
 class Attention(chainer.Chain):
     """
-    A class for Attention in seq2seq.
+    A class for Attention in Pointer Networks.
 
     Attributes
     ----------
     W1, W2, v : chainer.links.Linear
-        Learnable Matrices and vector (in soft attention)
+        Learnable Matrices and vector (in content-based attention)
     hidden_dim : int
         number of hidden units in each layer
     """
     def __init__(self, hidden_dim):
+        initializer = chainer.initializers.Uniform(0.08)
         super(Attention, self).__init__()
         with self.init_scope():
-            self.W1 = L.Linear(hidden_dim, hidden_dim)
-            self.W2 = L.Linear(hidden_dim, hidden_dim)
-            self.v = L.Linear(hidden_dim, 1)
+            self.W1 = L.Linear(hidden_dim, hidden_dim, initialW=initializer)
+            self.W2 = L.Linear(hidden_dim, hidden_dim, initialW=initializer)
+            self.v = L.Linear(hidden_dim, 1, initialW=initializer)
 
         self.hidden_dim = hidden_dim
 
@@ -39,8 +40,7 @@ class Attention(chainer.Chain):
         ds : list
             hidden states of decoder
         """
-        # calculation (W1 * ej),  (W2 * dj) and
-        #    make tensor (n, m(P)) from each batchdata
+        # calculation (W1 * ej),  (W2 * dj) and make tensor (n, m(P)) from batch
         # i wanna accelerate this code :(
         probs = []
         indices = []
@@ -61,18 +61,21 @@ class Attention(chainer.Chain):
         return probs, indices
 
 
-class Seq2Seq(chainer.Chain):
-    def __init__(self, input_dim, hidden_dim):
-        super(Seq2Seq, self).__init__()
+class PointerNetworks(chainer.Chain):
+    def __init__(self, input_dim, hidden_dim, dropout):
+        super(PointerNetworks, self).__init__()
+        # initializer = chainer.initializers.Uniform(0.08)
+        # add initializer to NStepLSTM
         with self.init_scope():
             # NStepLSTM(n_layers, input_size, output_size, dropout)
-            self.encoder = L.NStepLSTM(1, input_dim, hidden_dim, 0.1)
-            self.decoder = L.NStepLSTM(1, input_dim, hidden_dim, 0.1)
+            self.encoder = L.NStepLSTM(1, input_dim, hidden_dim, dropout)
+            self.decoder = L.NStepLSTM(1, input_dim, hidden_dim, dropout)
             # For attention
             self.attention = Attention(hidden_dim)
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.dropout = dropout
 
     def __call__(self, xs, ys):
         # set the array module based on using device
@@ -121,8 +124,10 @@ def main():
     parser.add_argument('--dataset', type=str, default="modeltest.txt",
                         help='dataset name')
     parser.add_argument('--input_dim', type=int, default=2)
-    parser.add_argument('--hidden_dim', type=int, default=64)
-    parser.add_argument('--batchsize', '-b', type=int, default=64)
+    parser.add_argument('--hidden_dim', type=int, default=256) # in paper, {256, 512}
+    parser.add_argument('--batchsize', '-b', type=int, default=128)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1.0)
+    parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--device', '-d', type=str, default='-1')
     parser.add_argument('--out', type=str, default='result')
     parser.add_argument('--epoch', type=int, default=350)
@@ -143,17 +148,17 @@ def main():
     print('# dataset-size: {}'.format(len(dataset)))
     print('')
 
-    # making seq2seq model
-    model = Seq2Seq(args.input_dim, args.hidden_dim)
+    # making Pointer Networks model
+    model = PointerNetworks(args.input_dim, args.hidden_dim, args.dropout)
 
     # Choose the using device
     model.to_device(device)
     device.use()
 
-    # Setup an optimizer (default Adam)
-    # Todo: checking add gradient clipping
-    optimizer = chainer.optimizers.Adam()
+    # Setup an optimizer (following paper, SGD, lr=1.0 with L2 gradient clipping 2.0)
+    optimizer = chainer.optimizers.SGD(args.learning_rate)
     optimizer.setup(model)
+    optimizer.add_hook(chainer.optimizer.GradientClipping(2.0))
 
     # Split the dataset into traindata and testdata
     train, test = chainer.datasets.split_dataset_random(dataset, int(dataset.__len__() * 0.9))
