@@ -8,8 +8,8 @@ in chainer.
 
 ### Todo
 - 論文実験の再現
-  - ハイパラ、Optimizerの調節
   - 論文で用いたデータセットを利用した実験の実施
+    - beam searchをするにはEncoderとDecoder部分を分けないと辛いんだよなぁ……悲しみ
   - Seq2Seqモデルでも同じことする
 
 - Seq2Seq部分のリファクタリング
