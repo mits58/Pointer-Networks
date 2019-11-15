@@ -4,6 +4,28 @@ This is a repository for implementations of
 
 in chainer.
 
+### Dependencies
+I was running this code under 
+
+- python 3.7
+- chainer 
+- hoge
+- huga
+
+I included requirements.txt in repository, so you can install all dependencies by running below script.
+
+```
+pip install -r requirements.
+```
+
+### How to use
+Under construction...
+
+### (Optional) How to prepare dataset
+Under construction...
+
+
+
 ---
 
 ### Todo
