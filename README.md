@@ -2,7 +2,7 @@ This is a repository for implementations of
 - Sequence to Sequence [arXiv](https://arxiv.org/abs/1409.3215)
 - Pointer Networks [arXiv](https://arxiv.org/abs/1506.03134)
 
-in chainer.
+in chainer with trainer.
 
 ### Dependencies
 I was running this code under 
