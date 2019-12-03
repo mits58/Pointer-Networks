@@ -24,7 +24,9 @@ Under construction...
 ### (Optional) How to prepare dataset
 Under construction...
 
-
+### Links
+- Dataset for Pointer Networks
+  - https://drive.google.com/drive/folders/0B2fg8yPGn2TCMzBtS0o4Q2RJaEU
 
 ---
 
@@ -40,7 +42,3 @@ Under construction...
 - Pointer Networks部分のリファクタリング
   - for文を使って回している部分があるのでなんとかできたら嬉しい（が無理そう）
     - Attentionクラスの、__call__部分をbatchごとにできたら嬉しい……んだけど無理だよなぁ
-
-### Links
-- Pointer Networksのデータセット
-  - https://drive.google.com/drive/folders/0B2fg8yPGn2TCMzBtS0o4Q2RJaEU
